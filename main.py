@@ -19,7 +19,7 @@ def class_color(byte):
     return color
 
 def color_to_image(color_list):
-    img = np.zeros((10, 100, 3), dtype=np.uint8)
+    img = np.zeros((10, 110, 3), dtype=np.uint8)
 
     for i, (r, g, b) in enumerate(color_list):
         start = i * 10
@@ -28,34 +28,49 @@ def color_to_image(color_list):
     return img
     
 def fuzzy_inference_system(current_color, left_side, right_side):    
+    count = 0
+    print(current_color, left_side, right_side)
+
+    for color_byte in left_side:
+        if np.array_equal(current_color, color_byte):
+            count += 1
+        pass
+    left_similarity = np.array([ int(np.array_equal(current_color, color_byte)) for color_byte in left_side ]).sum() / len(left_side)
+    right_similarity = np.array([ int(np.array_equal(current_color, color_byte)) for color_byte in right_side ]).sum() / len(right_side)
+    
+    
+    print(left_similarity, right_similarity)
+    
     return 0.0;
     
 # Signature Agnostic Binary Visualizer
 def SABV(color_list):
     N = 5    
     new_list = np.zeros((10, 3), dtype=np.uint8)
-    
-    color_list_length = len(color_list)
-    for i in range(len(color_list)):
-        left_side = color_list[max(0, i - N):i]
-        right_side = color_list[i + 1:min(color_list_length, i + N + 1)]
 
-        brightness_index = 1 - fuzzy_inference_system(color_list[i], left_side, right_side)
+    color_list_length = len(color_list)
+
+    
+    i = 5
+    left_side = color_list[max(0, i - N):i]
+    right_side = color_list[i + 1:min(color_list_length, i + N + 1)]
+    
+    fuzzy_inference_system(color_list[i], left_side, right_side)
         
-        new_list[i] = brightness_index * color_list[i]
     return new_list;
 
                 
 
 if __name__ == "__main__":
     # test path
-    file_path = os.getcwd() + "/PE-files/544.exe"    
+    file_path = os.getcwd() + "/PE-files/546.exe"    
     with open(file_path, 'rb') as file:
         byte_array = np.frombuffer(file.read(), dtype=np.uint8)
 
     color_lut = np.array([class_color(i) for i in range(256)])
-    test_array= color_lut[byte_array[0:10]]
+    test_array= color_lut[byte_array[0:11]]
 
+    
     img_pre = color_to_image(test_array)
     
     SABV(test_array);
