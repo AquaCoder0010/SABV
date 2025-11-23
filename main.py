@@ -5,6 +5,7 @@ import cv2
 import math
 from hilbertcurve.hilbertcurve import HilbertCurve
 
+
 class SignatureAgnosticBinaryVisualizer:
     def __init__(self, N=5, sample=0.01):
         """
@@ -20,7 +21,6 @@ class SignatureAgnosticBinaryVisualizer:
         self._precompute_membership_functions()
         self.image_size = (512, 512)
         self.inner_hilbert = self.get_points(9, 2) # because order 9 hilbert
-        
 
     @staticmethod
     def points_to_order(points_count : int):
@@ -139,7 +139,7 @@ class SignatureAgnosticBinaryVisualizer:
         diff_fire_strength_l = self.u_diff(left_similarity)
         similar_fire_strength_l = self.u_similar(left_similarity)
         same_fire_strength_l = self.u_same(left_similarity)
-
+        
         diff_fire_strength_r = self.u_diff(right_similarity)
         similar_fire_strength_r = self.u_similar(right_similarity)
         same_fire_strength_r = self.u_same(right_similarity)
@@ -173,9 +173,6 @@ class SignatureAgnosticBinaryVisualizer:
         Returns:
             numpy.ndarray: Processed color array
         """
-        # (1559552, 3)
-        print(color_list.shape)
-
         new_list = np.zeros(color_list.shape, dtype=np.uint8)
         color_array = np.array(color_list)
 
@@ -190,6 +187,25 @@ class SignatureAgnosticBinaryVisualizer:
             
         return new_list
 
+
+    def space_filling_curve(self, colored_array):
+        total_bytes = len(colored_array)
+        
+        image_chunk_size = tuple()
+        if total_bytes < 256 * 1024:
+            image_chunk_size = (512, 512)
+        elif  256 * 1024 <= total_bytes < 1024 * 1024:
+            image_chunk_size = (256, 256)
+        elif 1024 * 1024 <= total_bytes < 4096 * 1024:
+            image_chunk_size = (128, 128)
+        elif 4096 * 1024 <= total_bytes:
+            image_chunk_size = (64, 64)
+
+        chunk_count = int(np.prod(self.image_size) / np.prod(image_chunk_size))
+        outer_hilbert = self.get_points(self.points_to_order(chunk_count), 2) * image_chunk_size[0]
+        
+        
+        pass
     
     def process_file(self, file_path):
         """
@@ -204,17 +220,62 @@ class SignatureAgnosticBinaryVisualizer:
         # Read and classify bytes
         with open(file_path, 'rb') as file:
             byte_array = np.frombuffer(file.read(), dtype=np.uint8)
+
+        total_bytes = len(byte_array)
+        
+        image_chunk_size = tuple()
+        if total_bytes < 256 * 1024:
+            image_chunk_size = (512, 512)
+        elif  256 * 1024 <= total_bytes < 1024 * 1024:
+            image_chunk_size = (256, 256)
+        elif 1024 * 1024 <= total_bytes < 4096 * 1024:
+            image_chunk_size = (128, 128)
+        elif 4096 * 1024 <= total_bytes:
+            image_chunk_size = (64, 64)
+
+        chunk_count = int(np.prod(self.image_size) / np.prod(image_chunk_size))
+        outer_hilbert = self.get_points(self.points_to_order(chunk_count), 2) * image_chunk_size[0]
+
+        max_bytes = chunk_count * np.prod(self.image_size)
+        if total_bytes < max_bytes:
+            byte_array = np.pad(
+                byte_array, (0, max_bytes - len(byte_array)), mode="constant", constant_values=0)
+        else:
+            byte_array = byte_array[0:max_bytes]    
+
             
         color_lut = np.array([self.class_color(i) for i in range(256)])
         colored_byte_array = color_lut[byte_array]
         
-        # Process the array
-        start = time.perf_counter()
         processed_array = self.BinaryVisualizer(colored_byte_array)
-        end = time.perf_counter()
 
-        execution_time = end - start
-        return processed_array, execution_time
+        full_image = np.zeros((self.image_size[0], self.image_size[1], 3), dtype=np.uint8)
+        image_pixel_count = np.prod(self.image_size);
+
+        for i, (ox, oy) in enumerate(outer_hilbert):
+            start_index = i * image_pixel_count
+            end_index = (i + 1) * image_pixel_count
+            
+            current_chunk = processed_array[start_index:end_index]
+        
+            inner_hilbert_x = self.inner_hilbert[:, 0]
+            inner_hilbert_y = self.inner_hilbert[:, 1]
+
+            chunk_image = np.zeros((self.image_size[0], self.image_size[1], 3), dtype=np.uint8)
+            
+            chunk_image[inner_hilbert_y, inner_hilbert_x] = current_chunk
+
+            resized_chunk = cv2.resize(chunk_image, image_chunk_size, interpolation=cv2.INTER_LINEAR)
+            full_image[oy:oy + image_chunk_size[0], ox:ox + image_chunk_size[1]] = resized_chunk
+        
+        return full_image
+
+        
+
+
+    
+
+        return processed_array
 
 # Example usage and main function
 if __name__ == "__main__":
@@ -222,15 +283,13 @@ if __name__ == "__main__":
     sabv = SignatureAgnosticBinaryVisualizer(N=3)
     
     # Test path
-    file_path = os.getcwd() + "/PE-files/544.exe"    
+    file_path = os.getcwd() + "/PE-files/546.exe"
+    img = sabv.process_file(file_path)
+
     
-    # Process file
-    processed_array, exec_time = sabv.process_file(file_path)
+    print(img.shape)
     
-    print(processed_array)
-    print(f"Execution time: {exec_time:.4f} seconds")
-    print(f"Processed {len(processed_array)} bytes")
+    cv2.imshow("image", img)
+    cv2.waitKey(0)
     
-    # Optional: Create and save image
-    # image = sabv.color_to_image(processed_array[:11])  # First 11 colors for demo
-    # cv2.imwrite("output.png", image)
+    
