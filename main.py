@@ -270,13 +270,6 @@ class SignatureAgnosticBinaryVisualizer:
         
         return full_image
 
-        
-
-
-    
-
-        return processed_array
-
 # Example usage and main function
 if __name__ == "__main__":
     # Create SABV instance
