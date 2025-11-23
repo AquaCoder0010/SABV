@@ -3,7 +3,6 @@ import numpy as np
 import os
 import cv2
 import math
-import random
 from hilbertcurve.hilbertcurve import HilbertCurve
 
 class SignatureAgnosticBinaryVisualizer:
@@ -131,11 +130,7 @@ class SignatureAgnosticBinaryVisualizer:
             
         Returns:
             float: Crisp value from fuzzy inference
-        """
-        left_side = np.array(left_side)
-        right_side = np.array(right_side)
-        current_color = np.array(current_color)
-        
+        """        
         # Calculate similarities with left and right neighborhoods
         left_similarity = np.mean(np.all(left_side == current_color, axis=1)) if len(left_side) > 0 else 0
         right_similarity = np.mean(np.all(right_side == current_color, axis=1)) if len(right_side) > 0 else 0
@@ -178,6 +173,9 @@ class SignatureAgnosticBinaryVisualizer:
         Returns:
             numpy.ndarray: Processed color array
         """
+        # (1559552, 3)
+        print(color_list.shape)
+
         new_list = np.zeros(color_list.shape, dtype=np.uint8)
         color_array = np.array(color_list)
 
@@ -192,9 +190,6 @@ class SignatureAgnosticBinaryVisualizer:
             
         return new_list
 
-    def arrange_hilbert(self, colored_bytes):
-        
-        pass;
     
     def process_file(self, file_path):
         """
@@ -205,56 +200,29 @@ class SignatureAgnosticBinaryVisualizer:
             
         Returns:
             tuple: (processed_color_array, execution_time)
-        """ 
+        """
         # Read and classify bytes
         with open(file_path, 'rb') as file:
             byte_array = np.frombuffer(file.read(), dtype=np.uint8)
-
-        total_bytes = len(byte_array)
             
-        image_chunk_size = tuple()
-        if total_bytes < 256 * 1024:
-            image_chunk_size = (512, 512)
-        elif  256 * 1024 <= total_bytes < 1024 * 1024:
-            image_chunk_size = (256, 256)
-        elif 1024 * 1024 <= total_bytes < 4096 * 1024:
-            image_chunk_size = (128, 128)
-        elif 4096 * 1024 <= total_bytes:
-            image_chunk_size = (64, 64)
-
-        chunk_count = int(np.prod(self.image_size) / np.prod(image_chunk_size))
-        outer_hilbert = self.get_points(self.points_to_order(chunk_count), 2) * image_chunk_size[0]
-
-        max_bytes = chunk_count * np.prod(self.image_size)
-        
-        if total_bytes < max_bytes:
-            byte_array = np.pad(byte_array, (0, max_bytes - len(byte_array)), mode="constant", constant_values=0)            
-        else:
-            byte_array = byte_array[0:max_bytes]
-
-        full_image = np.zeros((self.image_size[0], self.image_size[1], 3), dtype=np.uint8)
-        image_pixel_count = np.prod(self.image_size);
-            
-        color_lut = np.array([self.class_color(i) for i in range(256)], dtype=np.uint8)
+        color_lut = np.array([self.class_color(i) for i in range(256)])
         colored_byte_array = color_lut[byte_array]
-
+        
         # Process the array
-
+        start = time.perf_counter()
         processed_array = self.BinaryVisualizer(colored_byte_array)
+        end = time.perf_counter()
 
-
-        #img = self.arrange_hilbert(processed_array)
-
-        return processed_array
-
+        execution_time = end - start
+        return processed_array, execution_time
 
 # Example usage and main function
 if __name__ == "__main__":
     # Create SABV instance
-    sabv = SignatureAgnosticBinaryVisualizer(N=5)
+    sabv = SignatureAgnosticBinaryVisualizer(N=3)
     
     # Test path
-    file_path = os.getcwd() + "/PE-files/546.exe"    
+    file_path = os.getcwd() + "/PE-files/544.exe"    
     
     # Process file
     processed_array, exec_time = sabv.process_file(file_path)
