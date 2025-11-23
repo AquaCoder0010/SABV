@@ -1,8 +1,13 @@
+import time
+
+from hilbertcurve.hilbertcurve import HilbertCurve
+
 import numpy as np
 import os
 import cv2
 
 import math
+import random
 
 def class_color(byte):
     color = tuple()
@@ -27,32 +32,34 @@ def color_to_image(color_list):
         img[:, start:end] = (b, g, r)
     return img
 
-
 def u_diff(x):
-    if 0 <= x <= 0.2:
-        return 1.0
-    elif 0.2 < x <= 0.4:
-        return 5 * (0.4 - x)
-    return 0
-    
+    x = np.asarray(x)
+    result = np.zeros_like(x)
+    mask1 = (x >= 0) & (x <= 0.2)
+    mask2 = (x > 0.2) & (x <= 0.4)
+    result[mask1] = 1.0
+    result[mask2] = 5 * (0.4 - x[mask2])
+    return result
+
 def u_similar(x):
-    if 0 <= x <= 0.2:
-        return 0
-    elif 0.2 < x <= 0.4:
-        return 5 * (x - 0.2)
-    elif 0.4 < x <= 0.6:
-        return 1
-    elif 0.6 < x <= 0.8:
-        return 5 * (0.8 - x)
-    return 0
+    x = np.asarray(x)
+    result = np.zeros_like(x)
+    mask1 = (x > 0.2) & (x <= 0.4)
+    mask2 = (x > 0.4) & (x <= 0.6)
+    mask3 = (x > 0.6) & (x <= 0.8)
+    result[mask1] = 5 * (x[mask1] - 0.2)
+    result[mask2] = 1.0
+    result[mask3] = 5 * (0.8 - x[mask3])
+    return result
 
 def u_same(x):
-    if 0 <= x <= 0.6:
-        return 0
-    elif 0.6 < x <= 0.8:
-        return 5 * (x - 0.6)
-    return 1
-
+    x = np.asarray(x)
+    result = np.zeros_like(x)
+    mask1 = (x > 0.6) & (x <= 0.8)
+    mask2 = (x > 0.8)
+    result[mask1] = 5 * (x[mask1] - 0.6)
+    result[mask2] = 1.0
+    return result
 def u_light(x):
     return u_diff(x)
 
@@ -63,63 +70,78 @@ def u_dark(x):
     return u_same(x) 
 
 
-def fuzzy_inference_system(current_color, left_side, right_side):    
-    SAMPLE = 0.001
+# Precompute membership functions for entire domain (do this once outside the loop)
+def precompute_membership_functions(fuzzy_domain):
+    u_light_domain = u_light(fuzzy_domain)
+    u_medium_domain = u_medium(fuzzy_domain) 
+    u_dark_domain = u_dark(fuzzy_domain)
+    return u_light_domain, u_medium_domain, u_dark_domain
 
 
-    left_similarity = (
-        np.sum([int(np.array_equal(current_color, color_byte)) for color_byte in left_side]) / len(left_side)
-        if len(left_side) > 0 else 0
-    )
+def fuzzy_inference_system_optimized(current_color, left_side, right_side, fuzzy_domain, sample,
+                                   u_light_domain, u_medium_domain, u_dark_domain):
+    left_side = np.array(left_side)
+    right_side = np.array(right_side)
+    current_color = np.array(current_color)
     
-    right_similarity = (
-        np.sum([int(np.array_equal(current_color, color_byte)) for color_byte in right_side]) / len(right_side)
-        if len(right_side) > 0 else 0
-    )
+    left_similarity = np.mean(np.all(left_side == current_color, axis=1)) if len(left_side) > 0 else 0
+    right_similarity = np.mean(np.all(right_side == current_color, axis=1)) if len(right_side) > 0 else 0
     
+    # Calculate fire strengths
+    diff_fire_strength_l = u_diff(left_similarity)
+    similar_fire_strength_l = u_similar(left_similarity)
+    same_fire_strength_l = u_same(left_similarity)
+
+    diff_fire_strength_r = u_diff(right_similarity)
+    similar_fire_strength_r = u_similar(right_similarity)
+    same_fire_strength_r = u_same(right_similarity)
+
+    # Vectorized aggregation using precomputed membership functions
+    aggregate_terms = [
+        np.minimum(u_light_domain, diff_fire_strength_l),
+        np.minimum(u_light_domain, diff_fire_strength_r),
+        np.minimum(u_medium_domain, similar_fire_strength_l),
+        np.minimum(u_medium_domain, similar_fire_strength_r),
+        np.minimum(u_dark_domain, same_fire_strength_l),
+        np.minimum(u_dark_domain, same_fire_strength_r)
+    ]
     
-    diff_fire_strength_l = u_diff(left_similarity);
-    similar_fire_strength_l = u_similar(left_similarity);
-    same_fire_strength_l = u_same(left_similarity);
-
-    diff_fire_strength_r = u_diff(right_similarity);
-    similar_fire_strength_r = u_similar(right_similarity);
-    same_fire_strength_r = u_same(right_similarity);
-
-    aggregate_function_domain = [x for x in np.arange(0, 1, SAMPLE)]    
-    aggregate_function = np.array([
-        max(
-            min(u_light(x), diff_fire_strength_l),
-            min(u_light(x), diff_fire_strength_r),
-            min(u_medium(x), similar_fire_strength_l),
-            min(u_medium(x), similar_fire_strength_r),
-            min(u_dark(x), same_fire_strength_l),
-            min(u_dark(x), same_fire_strength_r),
-        ) for x in aggregate_function_domain
-    ])
-    nominator = np.sum(aggregate_function * aggregate_function_domain * SAMPLE)
-    denominator = np.sum(aggregate_function * SAMPLE)
-
-    crisp_value = nominator / denominator;    
-    return crisp_value;
+    aggregate_function = np.maximum.reduce(aggregate_terms)
     
+    # Vectorized centroid calculation
+    weighted_domain = aggregate_function * fuzzy_domain * sample
+    sum_weights = np.sum(aggregate_function * sample)
+    
+    crisp_value = np.sum(weighted_domain) / sum_weights if sum_weights != 0 else 0
+    return crisp_value
+
+
 # Signature Agnostic Binary Visualizer
-def SABV(color_list):
-    N = 5    
-    new_list = np.zeros((11, 3), dtype=np.uint8)
+def SABV(color_list, N=5):
+    new_list = np.zeros(color_list.shape, dtype=np.uint8)
 
     color_list_length = len(color_list)
-    for i in range(len(color_list)):
-        left_side = color_list[max(0, i - N):i]
-        right_side = color_list[i + 1:min(color_list_length, i + N + 1)]
 
-        brightness_index = 1 - fuzzy_inference_system(color_list[i], left_side, right_side)
-        print(brightness_index)
+    SAMPLE = 0.01
+    fuzzy_domain = np.arange(0, 1, SAMPLE)
+    
+    # Precompute once outside the loop
+    u_light_domain, u_medium_domain, u_dark_domain = precompute_membership_functions(fuzzy_domain)
+
+    # Convert color_list to numpy array for faster operations
+    color_array = np.array(color_list)
+
+    for i in range(len(color_array)):
+        left_side = color_array[max(0, i - N):i]
+        right_side = color_array[i + 1:min(len(color_array), i + N + 1)]
+
+        brightness_index = 1 - fuzzy_inference_system_optimized(
+            color_array[i], left_side, right_side, fuzzy_domain, SAMPLE,
+            u_light_domain, u_medium_domain, u_dark_domain
+        )
+        new_list[i] = brightness_index * color_array[i]
         
-        new_list[i] = brightness_index * color_list[i]
-        print(new_list[i], color_list[i])
     return new_list
-                
 
 if __name__ == "__main__":
     # test path
@@ -128,18 +150,16 @@ if __name__ == "__main__":
         byte_array = np.frombuffer(file.read(), dtype=np.uint8)
 
     color_lut = np.array([class_color(i) for i in range(256)])
-    test_array= color_lut[byte_array[0:11]]
+    colored_byte_array = color_lut[byte_array]
 
+    start = time.perf_counter()
+    colored_byte_array = SABV(colored_byte_array)
     
-    img_pre = color_to_image(test_array)    
-    img = color_to_image(SABV(test_array))
-    cv2.imshow("img-pre", img_pre)
-    cv2.imshow("img", img)
-    cv2.waitKey(0)
-        
+    end = time.perf_counter()
 
+    # pass it through the PE to Image Conversion pipeline
+    print(colored_byte_array)
+    print(f"Execution time: {end - start:.4f} seconds")
+
+    print(len(colored_byte_array))    
     pass;
-
-
-
-
