@@ -49,7 +49,7 @@ class SignatureAgnosticBinaryVisualizer:
             tuple: RGB color tuple
         """
         if byte == 0:
-            return (128, 128, 128) 
+            return (0, 0, 0)
         elif byte == 255:
             return (255, 255, 0)
         elif 1 <= byte <= 31 or byte == 127:
@@ -187,25 +187,6 @@ class SignatureAgnosticBinaryVisualizer:
             
         return new_list
 
-
-    def space_filling_curve(self, colored_array):
-        total_bytes = len(colored_array)
-        
-        image_chunk_size = tuple()
-        if total_bytes < 256 * 1024:
-            image_chunk_size = (512, 512)
-        elif  256 * 1024 <= total_bytes < 1024 * 1024:
-            image_chunk_size = (256, 256)
-        elif 1024 * 1024 <= total_bytes < 4096 * 1024:
-            image_chunk_size = (128, 128)
-        elif 4096 * 1024 <= total_bytes:
-            image_chunk_size = (64, 64)
-
-        chunk_count = int(np.prod(self.image_size) / np.prod(image_chunk_size))
-        outer_hilbert = self.get_points(self.points_to_order(chunk_count), 2) * image_chunk_size[0]
-        
-        
-        pass
     
     def process_file(self, file_path):
         """
@@ -246,9 +227,21 @@ class SignatureAgnosticBinaryVisualizer:
             
         color_lut = np.array([self.class_color(i) for i in range(256)])
         colored_byte_array = color_lut[byte_array]
+
+        # delete me later uwu
+        def color_to_image(color_list):
+            img = np.zeros((10, 110, 3), dtype=np.uint8)
+
+            for i, (r, g, b) in enumerate(color_list):
+                start = i * 10
+                end = start + 10
+                img[:, start:end] = (b, g, r)
+            return img
+
         
         processed_array = self.BinaryVisualizer(colored_byte_array)
-
+        
+        
         full_image = np.zeros((self.image_size[0], self.image_size[1], 3), dtype=np.uint8)
         image_pixel_count = np.prod(self.image_size);
 
@@ -276,11 +269,9 @@ if __name__ == "__main__":
     sabv = SignatureAgnosticBinaryVisualizer(N=3)
     
     # Test path
-    file_path = os.getcwd() + "/PE-files/546.exe"
+        
+    file_path = os.getcwd() + "/PE-files/1.exe"
     img = sabv.process_file(file_path)
-
-    
-    print(img.shape)
     
     cv2.imshow("image", img)
     cv2.waitKey(0)
