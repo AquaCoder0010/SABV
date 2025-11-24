@@ -228,16 +228,6 @@ class SignatureAgnosticBinaryVisualizer:
         color_lut = np.array([self.class_color(i) for i in range(256)])
         colored_byte_array = color_lut[byte_array]
 
-        # delete me later uwu
-        def color_to_image(color_list):
-            img = np.zeros((10, 110, 3), dtype=np.uint8)
-
-            for i, (r, g, b) in enumerate(color_list):
-                start = i * 10
-                end = start + 10
-                img[:, start:end] = (b, g, r)
-            return img
-
         
         processed_array = self.BinaryVisualizer(colored_byte_array)
         
