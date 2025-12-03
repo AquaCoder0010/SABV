@@ -163,19 +163,18 @@ class SignatureAgnosticBinaryVisualizer:
         crisp_value = np.sum(weighted_domain) / sum_weights if sum_weights != 0 else 0
         return crisp_value
 
-    def BinaryVisualizer(self, color_list):
+    def BinaryVisualizer(self, color_array):
         """
         Main processing method - applies signature-agnostic binary visualization.
         
         Args:
-            color_list (numpy.ndarray): Array of colors to process
+            color_array (numpy.ndarray): Array of colors to process
             
         Returns:
             numpy.ndarray: Processed color array
         """
-        new_list = np.zeros(color_list.shape, dtype=np.uint8)
-        color_array = np.array(color_list)
-
+        new_list = np.zeros(color_array.shape, dtype=np.uint8)
+        print(color_array.shape) 
         for i in range(len(color_array)):
             left_side = color_array[max(0, i - self.N):i]
             right_side = color_array[i + 1:min(len(color_array), i + self.N + 1)]
@@ -187,6 +186,94 @@ class SignatureAgnosticBinaryVisualizer:
             
         return new_list
 
+    def BinaryVisualizer_v(self, color_array):
+        """
+        Main processing method - applies signature-agnostic binary visualization.
+        
+        Args:
+            color_array (numpy.ndarray): Array of colors to process
+            
+        Returns:
+            numpy.ndarray: Processed color array
+        """
+        M = len(color_array)
+        left_matches = np.zeros(M, dtype=np.uint8)
+        left_counts = np.zeros(M, dtype=np.uint8)
+        
+        right_matches = np.zeros(M, dtype=np.uint8)
+        right_counts = np.zeros(M, dtype=np.uint8)
+        
+        for k in range(1, 1 + self.N):
+            matches_l = np.all(color_array[k:] == color_array[:-k], axis=1)
+            left_matches[k:] += matches_l
+            left_counts[k:]  += 1
+            
+            matches_r = np.all(color_array[:-k] == color_array[k:], axis=1)
+            right_matches[:-k] += matches_r
+            right_counts[:-k]  += 1
+            
+        left_similarity = np.divide(left_matches, left_counts, out=np.zeros(M), where=left_counts!=0, dtype=np.float16)
+        right_similarity = np.divide(right_matches, right_counts, out=np.zeros(M), where=right_counts!=0, dtype=np.float16)
+
+        diff_fire_strength_l    = self.u_diff(left_similarity)
+        similar_fire_strength_l = self.u_similar(left_similarity)
+        same_fire_strength_l    = self.u_same(left_similarity)
+        
+        diff_fire_strength_r    = self.u_diff(right_similarity)
+        similar_fire_strength_r = self.u_similar(right_similarity)
+        same_fire_strength_r    = self.u_same(right_similarity)
+        
+        # 2. Prepare for Broadcasting
+        # We need to compare Strengths (M,) against Domains (D,)
+        # We stack them to shape (6, M) and (6, D) to process all rules in one block
+        
+        # Stack all 6 fire strengths: Shape (6, M)
+        strengths_stacked = np.array([
+            diff_fire_strength_l, diff_fire_strength_r,
+            similar_fire_strength_l, similar_fire_strength_r,
+            same_fire_strength_l, same_fire_strength_r
+        ])
+        
+        # Stack corresponding domain shapes: Shape (6, D)
+        domains_stacked = np.array([
+            self.u_light_domain, self.u_light_domain,
+            self.u_medium_domain, self.u_medium_domain,
+            self.u_dark_domain, self.u_dark_domain
+        ])
+
+        
+        # 3. Vectorized Inference (Clipping)
+        # Reshape for broadcasting:
+        # Strengths: (6, M, 1)
+        # Domains:   (6, 1, D)
+        # Result:    (6, M, D) -> Represents the clipped fuzzy sets for every rule, for every pixel
+        clipped_rules = np.minimum(domains_stacked[:, None, :], strengths_stacked[:, :, None])
+        
+        # 4. Aggregation (Union)
+        # Max over the rules axis (axis 0). 
+        # Result shape: (M, D) -> The final combined fuzzy shape for each pixel
+        aggregate_function = np.max(clipped_rules, axis=0)
+        
+        # 5. Defuzzification (Centroid)
+        # We compute the weighted average across the Domain axis (axis 1)
+        
+        # Numerator: Sum(Area * x) -> Sum over axis 1
+        # self.fuzzy_domain must be broadcasted to (1, D) or simply (D,) works with (M, D)
+        weighted_sum = np.sum(aggregate_function * self.fuzzy_domain * self.sample, axis=1)
+        
+        # Denominator: Sum(Area) -> Sum over axis 1
+        sum_weights = np.sum(aggregate_function * self.sample, axis=1)
+        
+        # 6. Final Division (Handle division by zero)
+        # Result shape: (M,)
+        crisp_values = np.divide(
+            weighted_sum, 
+            sum_weights, 
+            out=np.zeros_like(weighted_sum), 
+            where=sum_weights != 0
+        )
+        new_list = color_array * crisp_values[:, None]
+        return new_list
     
     def process_file(self, file_path):
         """
@@ -207,12 +294,8 @@ class SignatureAgnosticBinaryVisualizer:
         image_chunk_size = tuple()
         if total_bytes < 256 * 1024:
             image_chunk_size = (512, 512)
-        elif  256 * 1024 <= total_bytes < 1024 * 1024:
+        elif  256 * 1024 <= total_bytes:
             image_chunk_size = (256, 256)
-        elif 1024 * 1024 <= total_bytes < 4096 * 1024:
-            image_chunk_size = (128, 128)
-        elif 4096 * 1024 <= total_bytes:
-            image_chunk_size = (64, 64)
 
         chunk_count = int(np.prod(self.image_size) / np.prod(image_chunk_size))
         outer_hilbert = self.get_points(self.points_to_order(chunk_count), 2) * image_chunk_size[0]
@@ -223,15 +306,14 @@ class SignatureAgnosticBinaryVisualizer:
                 byte_array, (0, max_bytes - len(byte_array)), mode="constant", constant_values=0)
         else:
             byte_array = byte_array[0:max_bytes]    
-
+            
+        print(f"total_bytes {total_bytes}, chunk_side {image_chunk_size}, max_bytes {max_bytes}")
             
         color_lut = np.array([self.class_color(i) for i in range(256)])
         colored_byte_array = color_lut[byte_array]
-
         
-        processed_array = self.BinaryVisualizer(colored_byte_array)
-        
-        
+        processed_array = self.BinaryVisualizer_v(colored_byte_array)
+                                
         full_image = np.zeros((self.image_size[0], self.image_size[1], 3), dtype=np.uint8)
         image_pixel_count = np.prod(self.image_size);
 
@@ -253,17 +335,18 @@ class SignatureAgnosticBinaryVisualizer:
         
         return full_image
 
-# Example usage and main function
+# Example usage
 if __name__ == "__main__":
     # Create SABV instance
-    sabv = SignatureAgnosticBinaryVisualizer(N=3)
+    sabv = SignatureAgnosticBinaryVisualizer(N=10)
     
-    # Test path
-        
-    file_path = os.getcwd() + "/PE-files/1.exe"
+    file_path = os.getcwd() + "/PE-files/mal-1.exe" 
+    start = time.perf_counter()
     img = sabv.process_file(file_path)
+    end = time.perf_counter()
+
+    print(f"Execution time: {end - start:.4f} seconds")
     
-    cv2.imshow("image", img)
+    cv2.imshow("img", img)
     cv2.waitKey(0)
-    
     
