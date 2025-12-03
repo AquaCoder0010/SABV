@@ -9,7 +9,7 @@ Converts any PE file (or any file) and visualizes it through fuzzy inference
 ```bash
 git clone https://github.com/AquaCoder0010/SABV.git
 pip install -r requirements.txt
-
+```
 
 
 # Example
