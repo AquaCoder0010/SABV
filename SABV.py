@@ -6,8 +6,11 @@ import math
 from hilbertcurve.hilbertcurve import HilbertCurve
 
 
+from memory_profiler import profile
+
+
 class SignatureAgnosticBinaryVisualizer:
-    def __init__(self, N=5, sample=0.01):
+    def __init__(self, N=5, sample=0.05):
         """
         Initialize the SABV class with parameters.
         
@@ -115,9 +118,9 @@ class SignatureAgnosticBinaryVisualizer:
         Precompute membership functions for the entire fuzzy domain.
         This is done once during initialization for performance.
         """
-        self.u_light_domain = self.u_light(self.fuzzy_domain)
-        self.u_medium_domain = self.u_medium(self.fuzzy_domain) 
-        self.u_dark_domain = self.u_dark(self.fuzzy_domain)
+        self.u_light_domain = self.u_light(self.fuzzy_domain).astype(np.float16)
+        self.u_medium_domain = self.u_medium(self.fuzzy_domain).astype(np.float16)
+        self.u_dark_domain = self.u_dark(self.fuzzy_domain).astype(np.float16)
 
     def _fuzzy_inference_system(self, current_color, left_side, right_side):
         """
@@ -152,8 +155,7 @@ class SignatureAgnosticBinaryVisualizer:
             np.minimum(self.u_medium_domain, similar_fire_strength_r),
             np.minimum(self.u_dark_domain, same_fire_strength_l),
             np.minimum(self.u_dark_domain, same_fire_strength_r)
-        ]
-        
+        ]        
         aggregate_function = np.maximum.reduce(aggregate_terms)
         
         # Vectorized centroid calculation
@@ -185,11 +187,10 @@ class SignatureAgnosticBinaryVisualizer:
             new_list[i] = brightness_index * color_array[i]
             
         return new_list
-
+    @profile
     def BinaryVisualizer_v(self, color_array):
         """
-        Main processing method - applies signature-agnostic binary visualization.
-        
+        Main processing method - applies signature-agnostic binary visualization. (FASTER)
         Args:
             color_array (numpy.ndarray): Array of colors to process
             
@@ -201,17 +202,16 @@ class SignatureAgnosticBinaryVisualizer:
         left_counts = np.zeros(M, dtype=np.uint8)
         
         right_matches = np.zeros(M, dtype=np.uint8)
-        right_counts = np.zeros(M, dtype=np.uint8)
+        right_counts = np.zeros(M, dtype=np.uint8)        
         
         for k in range(1, 1 + self.N):
-            matches_l = np.all(color_array[k:] == color_array[:-k], axis=1)
-            left_matches[k:] += matches_l
+            matches = np.all(color_array[k:] == color_array[:-k], axis=1)
+            left_matches[k:] += matches
             left_counts[k:]  += 1
             
-            matches_r = np.all(color_array[:-k] == color_array[k:], axis=1)
-            right_matches[:-k] += matches_r
+            right_matches[:-k] += matches
             right_counts[:-k]  += 1
-            
+                    
         left_similarity = np.divide(left_matches, left_counts, out=np.zeros(M), where=left_counts!=0, dtype=np.float16)
         right_similarity = np.divide(right_matches, right_counts, out=np.zeros(M), where=right_counts!=0, dtype=np.float16)
 
@@ -226,20 +226,20 @@ class SignatureAgnosticBinaryVisualizer:
         # 2. Prepare for Broadcasting
         # We need to compare Strengths (M,) against Domains (D,)
         # We stack them to shape (6, M) and (6, D) to process all rules in one block
-        
+
+        breakpoint()
         # Stack all 6 fire strengths: Shape (6, M)
         strengths_stacked = np.array([
             diff_fire_strength_l, diff_fire_strength_r,
             similar_fire_strength_l, similar_fire_strength_r,
             same_fire_strength_l, same_fire_strength_r
-        ])
-        
+        ], dtype=np.float16)
         # Stack corresponding domain shapes: Shape (6, D)
         domains_stacked = np.array([
             self.u_light_domain, self.u_light_domain,
             self.u_medium_domain, self.u_medium_domain,
             self.u_dark_domain, self.u_dark_domain
-        ])
+        ], dtype=np.float16)
 
         
         # 3. Vectorized Inference (Clipping)
@@ -338,9 +338,9 @@ class SignatureAgnosticBinaryVisualizer:
 # Example usage
 if __name__ == "__main__":
     # Create SABV instance
-    sabv = SignatureAgnosticBinaryVisualizer(N=10)
+    sabv = SignatureAgnosticBinaryVisualizer(N=3)
     
-    file_path = os.getcwd() + "/PE-files/mal-1.exe" 
+    file_path = os.getcwd() + "/PE-files/546.exe" 
     start = time.perf_counter()
     img = sabv.process_file(file_path)
     end = time.perf_counter()
