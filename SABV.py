@@ -5,7 +5,6 @@ import cv2
 import math
 from hilbertcurve.hilbertcurve import HilbertCurve
 
-
 from memory_profiler import profile
 
 
@@ -52,7 +51,7 @@ class SignatureAgnosticBinaryVisualizer:
             tuple: RGB color tuple
         """
         if byte == 0:
-            return (0, 0, 0)
+            return (200, 200, 200)
         elif byte == 255:
             return (255, 255, 0)
         elif 1 <= byte <= 31 or byte == 127:
@@ -113,6 +112,18 @@ class SignatureAgnosticBinaryVisualizer:
         """Dark intensity membership function"""
         return SignatureAgnosticBinaryVisualizer.u_same(x)
 
+    @staticmethod
+    def clamp_crisp(x):
+        x = np.asarray(x)
+        result = np.zeros_like(x)
+        mask1 = (x >= 0) & (x <= 0.2)
+        mask2 = (x > 0.2) & (x <= 0.65)
+        mask3 = (x > 0.65) & (x <= 1)
+        result[mask1] = 0.2
+        result[mask2] = x[mask2]
+        result[mask3] = 1        
+        return result
+    
     def _precompute_membership_functions(self):
         """
         Precompute membership functions for the entire fuzzy domain.
@@ -187,6 +198,8 @@ class SignatureAgnosticBinaryVisualizer:
             new_list[i] = brightness_index * color_array[i]
             
         return new_list
+
+
     @profile
     def BinaryVisualizer_v(self, color_array):
         """
@@ -197,6 +210,7 @@ class SignatureAgnosticBinaryVisualizer:
         Returns:
             numpy.ndarray: Processed color array
         """
+        
         M = len(color_array)
         left_matches = np.zeros(M, dtype=np.uint8)
         left_counts = np.zeros(M, dtype=np.uint8)
@@ -223,38 +237,22 @@ class SignatureAgnosticBinaryVisualizer:
         similar_fire_strength_r = self.u_similar(right_similarity)
         same_fire_strength_r    = self.u_same(right_similarity)
         
-        # 2. Prepare for Broadcasting
-        # We need to compare Strengths (M,) against Domains (D,)
-        # We stack them to shape (6, M) and (6, D) to process all rules in one block
+        D = self.u_light_domain.shape[0]
+        aggregate_function = np.zeros((M, D), dtype=np.float16)
 
-        breakpoint()
-        # Stack all 6 fire strengths: Shape (6, M)
-        strengths_stacked = np.array([
-            diff_fire_strength_l, diff_fire_strength_r,
-            similar_fire_strength_l, similar_fire_strength_r,
-            same_fire_strength_l, same_fire_strength_r
-        ], dtype=np.float16)
-        # Stack corresponding domain shapes: Shape (6, D)
-        domains_stacked = np.array([
-            self.u_light_domain, self.u_light_domain,
-            self.u_medium_domain, self.u_medium_domain,
-            self.u_dark_domain, self.u_dark_domain
-        ], dtype=np.float16)
+        rules = [
+            (diff_fire_strength_l,    self.u_light_domain),
+            (diff_fire_strength_r,    self.u_light_domain),
+            (similar_fire_strength_l, self.u_medium_domain),
+            (similar_fire_strength_r, self.u_medium_domain),
+            (same_fire_strength_l,    self.u_dark_domain),
+            (same_fire_strength_r,    self.u_dark_domain)
+        ]
+        for strength, domain in rules:
+            np.maximum(aggregate_function, np.minimum(strength[:, None], domain[None, :]), out=aggregate_function)
 
-        
-        # 3. Vectorized Inference (Clipping)
-        # Reshape for broadcasting:
-        # Strengths: (6, M, 1)
-        # Domains:   (6, 1, D)
-        # Result:    (6, M, D) -> Represents the clipped fuzzy sets for every rule, for every pixel
-        clipped_rules = np.minimum(domains_stacked[:, None, :], strengths_stacked[:, :, None])
-        
-        # 4. Aggregation (Union)
-        # Max over the rules axis (axis 0). 
-        # Result shape: (M, D) -> The final combined fuzzy shape for each pixel
-        aggregate_function = np.max(clipped_rules, axis=0)
-        
-        # 5. Defuzzification (Centroid)
+
+        # Defuzzification (Centroid)
         # We compute the weighted average across the Domain axis (axis 1)
         
         # Numerator: Sum(Area * x) -> Sum over axis 1
@@ -272,8 +270,11 @@ class SignatureAgnosticBinaryVisualizer:
             out=np.zeros_like(weighted_sum), 
             where=sum_weights != 0
         )
-        new_list = color_array * crisp_values[:, None]
-        return new_list
+        crisp_values = 1 - crisp_values
+        crisp_values = self.clamp_crisp(crisp_values)
+        
+        new_list = color_array * crisp_values[:, None].astype(np.float32)
+        return new_list.astype(np.uint8)
     
     def process_file(self, file_path):
         """
@@ -340,7 +341,7 @@ if __name__ == "__main__":
     # Create SABV instance
     sabv = SignatureAgnosticBinaryVisualizer(N=3)
     
-    file_path = os.getcwd() + "/PE-files/546.exe" 
+    file_path = os.getcwd() + "/PE-files/544.exe" 
     start = time.perf_counter()
     img = sabv.process_file(file_path)
     end = time.perf_counter()
@@ -349,4 +350,3 @@ if __name__ == "__main__":
     
     cv2.imshow("img", img)
     cv2.waitKey(0)
-    
