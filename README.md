@@ -45,7 +45,7 @@ cv2.imwrite("IMAGE_PATH.png", img)
 ```
 
 # Benchmark
-<img src="images/Figure_1.png" alt="alt text" width="300">
+<img src="images/Figure_1.png" alt="alt text" width>
 
 # Example Images
 ## with FIS
@@ -60,5 +60,3 @@ Saridou, B.; Rose, J. R.; Shiaeles, S.; Papadopoulos, B.
 **Electronics**, 2022, **11**, 1044.  
 https://doi.org/10.3390/electronics11071044
 
-
-# LICENSE
