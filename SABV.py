@@ -191,18 +191,10 @@ class SignatureAgnosticBinaryVisualizer:
         for strength, domain in rules:
             np.maximum(aggregate_function, np.minimum(strength[:, None], domain[None, :]), out=aggregate_function)
 
-        # Defuzzification (Centroid)
-        # We compute the weighted average across the Domain axis (axis 1)
-        
-        # Numerator: Sum(Area * x) -> Sum over axis 1
-        # self.fuzzy_domain must be broadcasted to (1, D) or simply (D,) works with (M, D)
         weighted_sum = np.sum(aggregate_function * self.fuzzy_domain * self.sample, axis=1)
         
-        # Denominator: Sum(Area) -> Sum over axis 1
         sum_weights = np.sum(aggregate_function * self.sample, axis=1)
         
-        # 6. Final Division (Handle division by zero)
-        # Result shape: (M,)
         crisp_values = np.divide(
             weighted_sum, 
             sum_weights, 
@@ -339,7 +331,7 @@ class SignatureAgnosticBinaryVisualizer:
         color_lut = np.array([self.class_color(i) for i in range(256)])
         colored_byte_array = color_lut[byte_array]
 
-        core_count = 1
+        core_count = os.cpu_count()
         if core_count == 1:
             processed_array = self.BinaryVisualizer_v(colored_byte_array)
         else:
