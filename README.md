@@ -5,9 +5,9 @@ Optionally integrates a fuzzy-inference system (FIS) inspired by the SAGMAD meth
 
 SABV allows:
 - Conversion of arbitrary binary files into structured image representations  
-- Optional fuzzy-inference–enhanced visualizations  
+- Optional fuzzy-inference enhanced visualizations
+- Custom color schemes
 - Configurable sampling, resolution, and threading
-
 ---
 
 # Installation
@@ -32,6 +32,27 @@ img = sabv.process_file("ENTER-FILE-PATH")
 
 cv2.imwrite("IMAGE_PATH.png", img)
 ```
+
+
+## Basic Visualization with custom color scheme (FIS disabled)
+
+
+```python
+from SABV import SABV
+import cv2
+
+# note that color_scheme must be a function as well as a function that returns a tuple
+def custom_color_scheme(byte):
+	if byte > 128:
+	   return (128, 128, 128)
+	return (255, 255, 255)
+
+sabv = SignatureAgnosticBinaryVisualizer()
+sabv.set_color_scheme(custom)
+img = sabv.process_file("ENTER-FILE-PATH")
+cv2.imwrite("IMAGE_PATH.png", img)
+
+
 ## Visualization With Fuzzy Inference System (FIS)
 
 ```python
