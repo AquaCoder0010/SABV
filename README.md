@@ -23,7 +23,7 @@ pip install -r requirements.txt
 ## Basic Visualization (FIS disabled)
 
 ```python
-from SABV import SignatureAgnosticBinaryVisualizer
+from SABV import SABV
 import cv2
 
 # visualization without fuzzy inference
@@ -35,7 +35,7 @@ cv2.imwrite("IMAGE_PATH.png", img)
 ## Visualization With Fuzzy Inference System (FIS)
 
 ```python
-from SABV import SignatureAgnosticBinaryVisualizer
+from SABV import SABV
 import cv2
 
 sabv_with_fis = SABV(FIS_ENABLED=True, N=3, sample=0.05, FIS_THREADING_ENABLED=True)
