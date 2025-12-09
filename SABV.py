@@ -6,17 +6,9 @@ import cv2
 import math
 from hilbertcurve.hilbertcurve import HilbertCurve
 
-from memory_profiler import profile
-
-from enum import Enum
-
-class Options(Enum):
-    FIS_ENABLED = 1
-    FIS_DISABLED = 2
-
-
+# Signature Agnostic Binary Visualizer 
 class SignatureAgnosticBinaryVisualizer:
-    def __init__(self, N=0, option=Options.FIS_DISABLED, sample=0.05):
+    def __init__(self, FIS_ENABLED=False, N=None, sample=None, FIS_THREADING_ENABLED=False):
         """
         Initialize the SABV class with parameters.
         
@@ -24,14 +16,47 @@ class SignatureAgnosticBinaryVisualizer:
             N (int): Window size for neighborhood analysis
             sample (float): Sampling rate for fuzzy domain
         """
-        self.N = 2
-        self.sample = sample
-        self.fuzzy_domain = np.arange(0, 1, sample)
-        self._precompute_membership_functions()
+        self.FIS_ENABLED=FIS_ENABLED
+        self.FIS_THREADING_ENABLED=None
+        self.N = None
+        self.sample = None
         
+        if self.FIS_ENABLED == False and FIS_THREADING_ENABLED == True:
+            print("Threading can't be true while FIS disabled!")
+            self.FIS_THREADING_ENABLED=False
+        if self.FIS_ENABLED == False and N != None:
+            print(f"Similarity Space (N) can't be type:{type(N)} while FIS disabled!")
+            self.N = None
+        if self.FIS_ENABLED == False and sample != None:
+            print(f"sample for fuzzy domain (sample) can't be type:{type(sample)} while FIS disabled!")
+            self.sample = None
+        else:
+            self.N = N
+            self.sample = sample
+            self.fuzzy_domain = np.arange(0, 1, sample)
+            self._precompute_membership_functions()
+            self.FIS_THREADING_ENABLED=FIS_THREADING_ENABLED
+                    
         self.image_size = (512, 512)
         self.inner_hilbert = self.get_points(9, 2) # because order 9 hilbert
-
+        self.user_def_color_scheme = None
+        
+    def set_color_scheme(self, func):
+        # Check if the function is callable
+        if not callable(func):
+            raise TypeError(
+                f"Invalid lambda function, parameter is type: {type(func)}"
+            )
+        DUMMY_VARIABLE = 0
+        # Check if the function returns a tuple
+        result = func(DUMMY_VARIABLE)
+        if not isinstance(result, tuple):
+            raise ValueError(
+                "Invalid output definition defined in custom function! "
+                f"Expected tuple, got {type(result)}"
+            )
+        self.user_def_color_scheme = func
+        
     @staticmethod
     def points_to_order(points_count : int):
         return int(math.log2(math.sqrt(points_count)))
@@ -69,6 +94,7 @@ class SignatureAgnosticBinaryVisualizer:
         else:
             return (255, 0, 0)
     
+        
     # Membership functions
     @staticmethod
     def u_diff(x):
@@ -210,8 +236,6 @@ class SignatureAgnosticBinaryVisualizer:
 
     def BinaryVisualizer_vt2(self, color_array):        
         def process(start_index, end_index):
-            assert(end_index > start_index), "invalid indexing"
-
             M = end_index - start_index + 1
             left_matches = np.zeros(M, dtype=np.uint8)
             left_counts = np.zeros(M, dtype=np.uint8)
@@ -327,16 +351,24 @@ class SignatureAgnosticBinaryVisualizer:
             byte_array = byte_array[0:max_bytes]    
             
         print(f"total_bytes {total_bytes}, chunk_side {image_chunk_size}, max_bytes {max_bytes}")
-            
-        color_lut = np.array([self.class_color(i) for i in range(256)])
+
+        color_lut = None
+        if self.user_def_color_scheme != None:
+            color_lut = np.array([self.user_def_color_scheme(i) for i in range(256)])
+        else:
+            color_lut = np.array([self.class_color(i) for i in range(256)])
+
         colored_byte_array = color_lut[byte_array]
 
-        core_count = os.cpu_count()
-        if core_count == 1:
-            processed_array = self.BinaryVisualizer_v(colored_byte_array)
+        if self.FIS_ENABLED == True:
+            core_count = os.cpu_count()
+            if core_count == 1 and self.FIS_THREADING_ENABLED:
+                print(f"Core count is {core_count}, disabling FIS_THREADING")
+                processed_array = self.BinaryVisualizer_v(colored_byte_array)
+            else:
+                processed_array = self.BinaryVisualizer_vt2(colored_byte_array)
         else:
-            processed_array = self.BinaryVisualizer_vt2(colored_byte_array)
-            
+            processed_array = colored_byte_array
                                 
         full_image = np.zeros((self.image_size[0], self.image_size[1], 3), dtype=np.uint8)
         image_pixel_count = np.prod(self.image_size);
@@ -361,15 +393,75 @@ class SignatureAgnosticBinaryVisualizer:
 
 # Example usage
 if __name__ == "__main__":
-    # Create SABV instance
-    sabv = SignatureAgnosticBinaryVisualizer(N=3, option=Options.FIS_ENABLED)
+    sabv_fis = SignatureAgnosticBinaryVisualizer(FIS_ENABLED=True, N=3, sample=0.05, FIS_THREADING_ENABLED=True)
+    sabv = SignatureAgnosticBinaryVisualizer()
+
     
-    file_path = os.getcwd() + "/PE-files/uwu.exe" 
+    
+    file_path = os.getcwd() + "/PE-files/546.exe" 
+
+    print(f"No FIS")
     start = time.perf_counter()
     img = sabv.process_file(file_path)
     end = time.perf_counter()
-
     print(f"Execution time: {end - start:.4f} seconds")
+
+    print(f"No FIS, custom color scheme")
+    def custom(byte):
+        """
+        Classify a byte (0–255) into one of 16 color bins:
+        00, 11, 22, ..., EE, FF.
+        
+        The high nibble (byte >> 4) determines the class.
+        """        
+        # High nibble: 0–15
+        nibble = byte >> 4
+        
+        # Mapping nibble 0–15 to RGB values
+        color_map = {
+            0x0: (0,   0,   0),
+            0x1: (128, 0,   0),
+            0x2: (154, 99,  36),
+            0x3: (128, 128, 0),
+            0x4: (70,  153, 144),
+            0x5: (0,   0,   117),
+            0x6: (230, 25,  75),
+            0x7: (245, 130, 49),
+            0x8: (255, 225, 25),
+            0x9: (191, 239, 69),
+            0xA: (60,  180, 75),
+            0xB: (66,  212, 244),
+            0xC: (67,  99,  216),
+            0xD: (145, 30,  180),
+            0xE: (240, 50,  230),
+            0xF: (255, 255, 255),
+        }
+        
+        return color_map[nibble]    
+    sabv.set_color_scheme(custom)
+
+    start = time.perf_counter()
+    img_2 = sabv.process_file(file_path)
+    end = time.perf_counter()
+    print(f"Execution time: {end - start:.4f} seconds")
+
+    
+
+    print(f"with FIS")
+    start = time.perf_counter()
+    img_3 = sabv_fis.process_file(file_path)
+    end = time.perf_counter()
+    print(f"Execution time: {end - start:.4f} seconds")
+
     
     cv2.imshow("img", img)
+    cv2.imshow("img_custom", img_2)
+    cv2.imshow("img_fis", img_3)
     cv2.waitKey(0)
+
+    cv2.imwrite("sabv-no-FIS.png",img);
+    cv2.imwrite("sabv-FIS.png",img_2);
+    
+    
+    
+SABV = SignatureAgnosticBinaryVisualizer
