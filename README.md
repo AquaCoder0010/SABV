@@ -33,9 +33,7 @@ img = sabv.process_file("ENTER-FILE-PATH")
 cv2.imwrite("IMAGE_PATH.png", img)
 ```
 
-
-## Basic Visualization with custom color scheme (FIS disabled)
-
+## Basic Visualization with custom color scheme
 
 ```python
 from SABV import SABV
@@ -51,7 +49,7 @@ sabv = SignatureAgnosticBinaryVisualizer()
 sabv.set_color_scheme(custom)
 img = sabv.process_file("ENTER-FILE-PATH")
 cv2.imwrite("IMAGE_PATH.png", img)
-
+```
 
 ## Visualization With Fuzzy Inference System (FIS)
 
