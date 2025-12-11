@@ -35,7 +35,7 @@ def run_benchmark_for_files(pe_files):
 
     results = defaultdict(lambda: defaultdict(list))
     
-    print(f"🔬 Starting benchmark with {len(pe_files)} files, {N_REPEATS} repeats per file...")
+    print(f"Starting benchmark with {len(pe_files)} files, {N_REPEATS} repeats per file...")
 
     for file_path in pe_files:
         file_name = os.path.basename(file_path)
@@ -134,13 +134,12 @@ def plot_benchmark_results(timing_results):
 # --- Main Execution ---
 
 if __name__ == "__main__":
-    
     # 1. Discover all PE files
     search_path = os.path.join(PE_FILES_DIR, FILE_PATTERN)
     pe_files = glob.glob(search_path)
     
     if not pe_files:
-        print(f"⚠️ Warning: No files found matching '{FILE_PATTERN}' in '{PE_FILES_DIR}'.")
+        print(f" Warning: No files found matching '{FILE_PATTERN}' in '{PE_FILES_DIR}'.")
         print("Please ensure the directory and file pattern are correct.")
     else:
         # 2. Run the actual benchmark
@@ -148,5 +147,5 @@ if __name__ == "__main__":
         
         # 3. Plot the aggregated results
         if timing_results:
-            print("\n📈 Aggregating and Rendering Histogram...")
+            print("\n Aggregating and Rendering Histogram...")
             plot_benchmark_results(timing_results)
