@@ -10,7 +10,14 @@ SABV allows:
 - Configurable sampling, resolution, and threading
 ---
 
+
 # Installation
+
+```bash
+pip install SABV
+```
+
+# Installation from source
 
 ```bash
 git clone https://github.com/AquaCoder0010/SABV.git
