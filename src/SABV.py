@@ -391,14 +391,13 @@ class SignatureAgnosticBinaryVisualizer:
         
         return full_image
 
+
 # Example usage
 if __name__ == "__main__":
     sabv_fis = SignatureAgnosticBinaryVisualizer(FIS_ENABLED=True, N=3, sample=0.05, FIS_THREADING_ENABLED=True)
     sabv = SignatureAgnosticBinaryVisualizer()
-
     
-    
-    file_path = os.getcwd() + "/PE-files/546.exe" 
+    file_path = os.getcwd() + "/PE-files/544.exe"
 
     print(f"No FIS")
     start = time.perf_counter()
@@ -446,7 +445,6 @@ if __name__ == "__main__":
     print(f"Execution time: {end - start:.4f} seconds")
 
     
-
     print(f"with FIS")
     start = time.perf_counter()
     img_3 = sabv_fis.process_file(file_path)
