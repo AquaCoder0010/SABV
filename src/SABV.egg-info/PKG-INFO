@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: SABV
-Version: 0.1.1
+Version: 0.1.2
 Summary:  Signature Agnostic Binary Visualizer based on SAGMAD
 Author-email: AquaCoder <aquacoder00100011@gmail.com>
 Requires-Python: >=3.7
